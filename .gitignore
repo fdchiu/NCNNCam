@@ -18,3 +18,7 @@ gradle/wrapper/gradle-wrapper\.jar
 app/src/main/assets/senhan0919\.bin
 
 app/src/main/assets/senhan0919\.param\.bin
+
+\.gradle/
+
+\.idea/
