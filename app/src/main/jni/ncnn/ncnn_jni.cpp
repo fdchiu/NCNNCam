@@ -35,7 +35,8 @@
 #include <mat.h>
 #include <net.h>
 
-#include "yolov2-tiny_voc.id.h"
+//#include "yolov2-tiny_voc.id.h"
+#include "mobilenet_yolo.id.h"
 #include "include/allocator.h"
 #include "include/mat.h"
 #include "include/net.h"
@@ -174,9 +175,9 @@ JNIEXPORT jarray JNICALL NCNNJNI_METHOD(nativeDetect)(JNIEnv* env, jobject thiz,
         //__android_log_print(ANDROID_LOG_DEBUG, "yolov2TinyJniIn", "yolov2_predict_has_input3, in[0][0]: %f; in[250][250]: %f", in.row(0)[0], in.row(250)[250]);
 
         ncnn::Extractor ex = ncnnnet.create_extractor();
-        ex.input(yolov2_tiny_voc_param_id::BLOB_data, in);
+        ex.input(mobilenet_yolo_param_id::BLOB_data, in);
         ncnn::Mat out;
-        ex.extract(yolov2_tiny_voc_param_id::BLOB_detection_out, out);
+        ex.extract(mobilenet_yolo_param_id::BLOB_detection_out, out);
         __android_log_print(ANDROID_LOG_DEBUG, "NcnnCam", "ncnn out: %dx%d;", out.w, out.h);
         int output_wsize = out.w;
         int output_hsize = out.h;
