@@ -23,21 +23,27 @@
 
 package com.davidchiu.ncnncam;
 
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Paint.Style;
+import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.Log;
 import android.util.Size;
 import android.util.TypedValue;
 import android.widget.Toast;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
 import java.util.Vector;
 
 /**
@@ -93,10 +99,18 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   public static final String NCNN_PARAM_FILE = "yolov2-tiny_voc.param.bin";
     public static final String NCNN_WEIGHTS_FILE = "yolov2-tiny_voc.bin";
-    public static final String NCNN_LABEL_FILE = "labels.txt";
+    public static final String NCNN_LABEL_FILE = "labelcoco20.txt";
 
-public static final int NCNN_YOLO_WIDTH = 416;
+   public static final int NCNN_YOLO_WIDTH = 416;
     public static final int NCNN_YOLO_HEIGHT = 416;
+    public int frameWidth ;
+    public int frameHeight;
+    private Matrix frameToCanvasMatrix;
+    public List<Detection> detections;
+    private final Paint boxPaint = new Paint();
+    private  BorderedText borderedText=null;
+    public int cropWidth;          //width and height for image input to model
+    public int cropHeight;
 
     //private BorderedText borderedText;
   @Override
@@ -104,18 +118,34 @@ public static final int NCNN_YOLO_WIDTH = 416;
     final float textSizePx =
         TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
-    //borderedText = new BorderedText(textSizePx);
-    //borderedText.setTypeface(Typeface.MONOSPACE);
+    borderedText = new BorderedText(textSizePx);
+    borderedText.setTypeface(Typeface.MONOSPACE);
+
+      boxPaint.setColor(Color.RED);
+      boxPaint.setStyle(Style.STROKE);
+      boxPaint.setStrokeWidth(12.0f);
+      boxPaint.setStrokeCap(Paint.Cap.ROUND);
+      boxPaint.setStrokeJoin(Paint.Join.ROUND);
+      boxPaint.setStrokeMiter(100);
 
     //tracker = new MultiBoxTracker(this);
 
     int cropSize = TF_OD_API_INPUT_SIZE;
     int cropSizeW = NCNN_YOLO_WIDTH;     //was: 128
     int cropSizeH = NCNN_YOLO_HEIGHT;    //was: 96
+      cropWidth = cropSizeW;
+      cropHeight = cropSizeH;
 
-    try {
+      previewWidth = size.getWidth();
+      previewHeight = size.getHeight();
+      frameHeight = previewHeight;
+      frameWidth = previewWidth;
+
+
+      try {
       detector = new Ncnn();
-        detector.initNcnn(this, NCNN_PARAM_FILE, NCNN_WEIGHTS_FILE, null);
+      detector.setImageSize(size.getWidth(), size.getHeight());
+        detector.initNcnn(this, NCNN_PARAM_FILE, NCNN_WEIGHTS_FILE, NCNN_LABEL_FILE);
       cropSize = TF_OD_API_INPUT_SIZE;
     } catch (final Exception e) {
       //LOGGER.e("Exception initializing classifier!", e);
@@ -126,31 +156,31 @@ public static final int NCNN_YOLO_WIDTH = 416;
       finish();
     }
 
-    previewWidth = size.getWidth();
-    previewHeight = size.getHeight();
-
     sensorOrientation = rotation - getScreenOrientation();
     LOGGER.i("Camera orientation relative to screen canvas: %d", sensorOrientation);
 
     LOGGER.i("Initializing at size %dx%d", previewWidth, previewHeight);
     rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
-    croppedBitmap = Bitmap.createBitmap(cropSizeW, cropSizeH, Config.ARGB_8888);
 
-    frameToCropTransform =
-        ImageUtils.getTransformationMatrix(
-            previewWidth, previewHeight,
-            cropSizeW, cropSizeH,
-            sensorOrientation, MAINTAIN_ASPECT);
+    if (false) {
+        croppedBitmap = Bitmap.createBitmap(cropSizeW, cropSizeH, Config.ARGB_8888);
+        frameToCropTransform =
+                ImageUtils.getTransformationMatrix(
+                        previewWidth, previewHeight,
+                        cropSizeW, cropSizeH,
+                        sensorOrientation, MAINTAIN_ASPECT);
 
-    cropToFrameTransform = new Matrix();
-    frameToCropTransform.invert(cropToFrameTransform);
-
+        cropToFrameTransform = new Matrix();
+        frameToCropTransform.invert(cropToFrameTransform);
+    } else {
+        prepare(sensorOrientation);  //90 means vertical screen while 0 means horizontal
+    }
     trackingOverlay = (OverlayView) findViewById(R.id.tracking_overlay);
     trackingOverlay.addCallback(
         new OverlayView.DrawCallback() {
           @Override
           public void drawCallback(final Canvas canvas) {
-            //tracker.draw(canvas);
+            draw(canvas);
             if (isDebug()) {
               //tracker.drawDebug(canvas);
             }
@@ -196,19 +226,21 @@ public static final int NCNN_YOLO_WIDTH = 416;
             lines.add("Rotation: " + sensorOrientation);
             lines.add("Inference time: " + lastProcessingTimeMs + "ms");
 
-            //borderedText.drawLines(canvas, 10, canvas.getHeight() - 10, lines);
+            borderedText.drawLines(canvas, 10, canvas.getHeight() - 10, lines);
           }
         });
   }
 
   OverlayView trackingOverlay;
 
+    boolean loadTestImage=false;
+
   @Override
   protected void processImage() {
     ++timestamp;
     final long currTimestamp = timestamp;
     byte[] originalLuminance = getLuminance();
-
+      trackingOverlay.postInvalidate();
 
     // No mutex needed as this method is not reentrant.
     if (computingDetection) {
@@ -219,7 +251,16 @@ public static final int NCNN_YOLO_WIDTH = 416;
     computingDetection = true;
     LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
 
-    rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
+    if (loadTestImage) {
+        rgbFrameBitmap = loadTestImage(null);
+        if (rgbFrameBitmap == null) {
+            readyForNextImage();
+            computingDetection = false;
+            return;
+        }
+    } else {
+        rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
+    }
 
     if (luminanceCopy == null) {
       luminanceCopy = new byte[originalLuminance.length];
@@ -241,13 +282,13 @@ public static final int NCNN_YOLO_WIDTH = 416;
             LOGGER.i("Running detection on image " + currTimestamp);
             final long startTime = SystemClock.uptimeMillis();
             //final List<Classifier.Recognition> results = detector.recognizeImage(croppedBitmap);
-            float[] result = detector.detect(croppedBitmap);
+              detections = detector.detect(croppedBitmap);
             lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
               Log.i("yolov2", " detect : " + lastProcessingTimeMs);
-            if (result != null) {
-                Log.i("detect: ", " data: " + result[0] + " length: " + result.length);
+            if (detections != null) {
+                Log.i("detect: ", " objects: " + detections.size());
             }
-         if(false) {
+         if(true) {
              cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
              final Canvas canvas = new Canvas(cropCopyBitmap);
              final Paint paint = new Paint();
@@ -255,13 +296,66 @@ public static final int NCNN_YOLO_WIDTH = 416;
              paint.setStyle(Style.STROKE);
              paint.setStrokeWidth(2.0f);
 
-
              requestRender();
          }
             computingDetection = false;
           }
         });
   }
+
+    public synchronized void draw(final Canvas canvas) {
+        final boolean rotated = sensorOrientation % 180 == 90;
+        final float multiplier =
+                Math.min(canvas.getHeight() / (float) (rotated ? frameWidth : frameHeight),
+                        canvas.getWidth() / (float) (rotated ? frameHeight : frameWidth));
+        frameToCanvasMatrix =
+                ImageUtils.getTransformationMatrix(
+                        frameWidth,
+                        frameHeight,
+                        (int) (multiplier * (rotated ? frameHeight : frameWidth)),
+                        (int) (multiplier * (rotated ? frameWidth : frameHeight)),
+                        sensorOrientation,
+                        false);
+        if (detections == null) return;
+        for (final Detection recognition : detections) {
+            final RectF trackedPos = new RectF(recognition.location);
+
+            frameToCanvasMatrix.mapRect(trackedPos);
+            boxPaint.setColor(recognition.color);
+
+            final float cornerSize = Math.min(trackedPos.width(), trackedPos.height()) / 8.0f;
+            canvas.drawRoundRect(trackedPos, cornerSize, cornerSize, boxPaint);
+
+            final String labelString =
+                    !TextUtils.isEmpty(recognition.title)
+                            ? String.format("%s %.2f", recognition.title, recognition.detectionConfidence)
+                            : String.format("%.2f", recognition.detectionConfidence);
+            borderedText.drawText(canvas, trackedPos.left + cornerSize, trackedPos.bottom, labelString);
+        }
+    }
+
+    public void prepare(int sensorOrientation) {
+        if (sensorOrientation == 0 || sensorOrientation == 180) {
+                croppedBitmap = Bitmap.createBitmap(cropWidth, cropHeight, Bitmap.Config.ARGB_8888);
+                frameToCropTransform =
+                        ImageUtils.getTransformationMatrix(
+                                previewWidth, previewHeight,
+                                cropWidth, cropHeight,
+                                sensorOrientation, MAINTAIN_ASPECT); // from [previewWidth, previewHeight] to [cropW, cropH]
+
+        } else {
+                croppedBitmap = Bitmap.createBitmap(cropHeight, cropWidth, Bitmap.Config.ARGB_8888);
+                frameToCropTransform =
+                        ImageUtils.getTransformationMatrix(
+                                previewWidth, previewHeight,
+                                cropHeight, cropWidth,
+                                sensorOrientation, MAINTAIN_ASPECT); // from [previewWidth, previewHeight] to [cropW, cropH]
+        }
+
+            cropToFrameTransform = new Matrix();
+            frameToCropTransform.invert(cropToFrameTransform);
+    }
+
 
   @Override
   protected int getLayoutId() {
@@ -277,4 +371,31 @@ public static final int NCNN_YOLO_WIDTH = 416;
   public void onSetDebug(final boolean debug) {
     //detector.enableStatLogging(debug);
   }
+
+
+    /**
+     * This method is for loading test images
+     */
+    protected int _testcount = -1;
+    protected int _testtotal = 1;
+    protected String _imagePath = "/sdcard";
+    protected String _imagename = "test";
+    protected String _imageextension = "jpg";
+
+    protected Bitmap loadTestImage(String path) {
+        if (path != null) {
+            _imagePath = path;
+        }
+        if (_imagePath == null || _imageextension == null || _imagename == null) {
+            throw new RuntimeException("path/file name/extension not set");
+        }
+        _testcount++;
+        if (_testcount >= _testtotal) {
+            _testcount = 0;
+        }
+        String _file_path_name = _imagePath + "/" + _imagename + _testcount + "." + _imageextension;
+        Log.i("loadTestImage", _file_path_name);
+        return BitmapFactory.decodeFile(_file_path_name);
+    }
+
 }

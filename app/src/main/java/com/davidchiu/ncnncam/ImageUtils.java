@@ -56,8 +56,10 @@ public class ImageUtils {
    *
    * @param bitmap The bitmap to save.
    */
+  public static int count=0;
   public static void saveBitmap(final Bitmap bitmap) {
-    saveBitmap(bitmap, "preview.png");
+    saveBitmap(bitmap, "preview" + (count) + ".png");
+    count++;
   }
 
   /**

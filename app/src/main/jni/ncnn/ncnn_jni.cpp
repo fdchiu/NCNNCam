@@ -29,7 +29,6 @@
 // ncnn
 #include "include/net.h"
 
-//#include "squeezenet_v1.1.id.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -69,10 +68,10 @@ static void bench_end(const char* comment)
 static ncnn::UnlockedPoolAllocator g_blob_pool_allocator;
 static ncnn::PoolAllocator g_workspace_pool_allocator;
 
-static ncnn::Mat squeezenet_param;
-static ncnn::Mat squeezenet_bin;
-static std::vector<std::string> squeezenet_words;
-static ncnn::Net squeezenet;
+static ncnn::Mat ncnn_param;
+static ncnn::Mat ncnn_bin;
+static std::vector<std::string> ncnn_label;
+static ncnn::Net ncnnnet;
 
 static std::vector<std::string> split_string(const std::string& str, const std::string& delimiter)
 {
@@ -92,26 +91,29 @@ static std::vector<std::string> split_string(const std::string& str, const std::
     return strings;
 }
 
+#define NCNNJNI_METHOD(METHOD_NAME) \
+  Java_com_davidchiu_ncnncam_Ncnn_##METHOD_NAME  // NOLINT
+
 extern "C" {
 
 // public native boolean Init(byte[] param, byte[] bin, byte[] words);
-JNIEXPORT jboolean JNICALL Java_com_davidchiu_ncnncam_Ncnn_init(JNIEnv* env, jobject thiz, jbyteArray param, jbyteArray bin, jbyteArray words)
+JNIEXPORT jboolean JNICALL  NCNNJNI_METHOD(init)(JNIEnv* env, jobject thiz, jbyteArray param, jbyteArray bin, jbyteArray words)
 {
     // init param
     {
         int len = env->GetArrayLength(param);
-        squeezenet_param.create(len, (size_t)1u);
-        env->GetByteArrayRegion(param, 0, len, (jbyte*)squeezenet_param);
-        int ret = squeezenet.load_param((const unsigned char*)squeezenet_param);
+        ncnn_param.create(len, (size_t)1u);
+        env->GetByteArrayRegion(param, 0, len, (jbyte*)ncnn_param);
+        int ret = ncnnnet.load_param((const unsigned char*)ncnn_param);
         __android_log_print(ANDROID_LOG_DEBUG, "yolov2ncnn", "load_param %d %d", ret, len);
     }
 
     // init bin
     {
         int len = env->GetArrayLength(bin);
-        squeezenet_bin.create(len, (size_t)1u);
-        env->GetByteArrayRegion(bin, 0, len, (jbyte*)squeezenet_bin);
-        int ret = squeezenet.load_model((const unsigned char*)squeezenet_bin);
+        ncnn_bin.create(len, (size_t)1u);
+        env->GetByteArrayRegion(bin, 0, len, (jbyte*)ncnn_bin);
+        int ret = ncnnnet.load_model((const unsigned char*)ncnn_bin);
         __android_log_print(ANDROID_LOG_DEBUG, "yolov2ncnn", "load_model %d %d", ret, len);
     }
 
@@ -122,7 +124,7 @@ JNIEXPORT jboolean JNICALL Java_com_davidchiu_ncnncam_Ncnn_init(JNIEnv* env, job
         std::string words_buffer;
         words_buffer.resize(len);
         env->GetByteArrayRegion(words, 0, len, (jbyte*)words_buffer.data());
-        squeezenet_words = split_string(words_buffer, "\n");
+        ncnn_label = split_string(words_buffer, "\n");
     }
 
     ncnn::Option opt;
@@ -136,7 +138,7 @@ JNIEXPORT jboolean JNICALL Java_com_davidchiu_ncnncam_Ncnn_init(JNIEnv* env, job
     return JNI_TRUE;
 }
 
-JNIEXPORT jarray JNICALL Java_com_davidchiu_ncnncam_Ncnn_detect(JNIEnv* env, jobject thiz, jobject bitmap)
+JNIEXPORT jarray JNICALL NCNNJNI_METHOD(nativeDetect)(JNIEnv* env, jobject thiz, jobject bitmap)
 {
     bench_start();
 
@@ -171,7 +173,7 @@ JNIEXPORT jarray JNICALL Java_com_davidchiu_ncnncam_Ncnn_detect(JNIEnv* env, job
 
         //__android_log_print(ANDROID_LOG_DEBUG, "yolov2TinyJniIn", "yolov2_predict_has_input3, in[0][0]: %f; in[250][250]: %f", in.row(0)[0], in.row(250)[250]);
 
-        ncnn::Extractor ex = squeezenet.create_extractor();
+        ncnn::Extractor ex = ncnnnet.create_extractor();
         ex.input(yolov2_tiny_voc_param_id::BLOB_data, in);
         ncnn::Mat out;
         ex.extract(yolov2_tiny_voc_param_id::BLOB_detection_out, out);
