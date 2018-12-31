@@ -40,6 +40,15 @@
 #include "include/allocator.h"
 #include "include/mat.h"
 #include "include/net.h"
+#include "ncnn_model_defines.h"
+
+#ifdef NCNN_INPUT
+#define USE_INPUT(a) STRINGIZE(a)
+#endif
+
+#ifdef NCNN_OUTPUT
+#define USE_OUTPUT(a) STRINGIZE(a)
+#endif
 
 static struct timeval tv_begin;
 static struct timeval tv_end;
@@ -175,9 +184,11 @@ JNIEXPORT jarray JNICALL NCNNJNI_METHOD(nativeDetect)(JNIEnv* env, jobject thiz,
         //__android_log_print(ANDROID_LOG_DEBUG, "yolov2TinyJniIn", "yolov2_predict_has_input3, in[0][0]: %f; in[250][250]: %f", in.row(0)[0], in.row(250)[250]);
 
         ncnn::Extractor ex = ncnnnet.create_extractor();
-        ex.input(mobilenet_yolo_param_id::BLOB_data, in);
+        //ex.input(USE_INPUT(NCNN_INPUT), in);
+        ex.input(ncnn_input, in);
         ncnn::Mat out;
-        ex.extract(mobilenet_yolo_param_id::BLOB_detection_out, out);
+        //ex.extract(USE_OUTPUT(NCNN_OUTPUT), out);
+        ex.extract(ncnn_output, out);
         __android_log_print(ANDROID_LOG_DEBUG, "NcnnCam", "ncnn out: %dx%d;", out.w, out.h);
         int output_wsize = out.w;
         int output_hsize = out.h;
@@ -190,48 +201,10 @@ JNIEXPORT jarray JNICALL NCNNJNI_METHOD(nativeDetect)(JNIEnv* env, jobject thiz,
             }
         }
 
-#if 1
         jfloatArray jOutputData = env->NewFloatArray(output_wsize*output_hsize+1);
         if (jOutputData == NULL) return NULL;
         env->SetFloatArrayRegion(jOutputData, 0,  output_wsize * output_hsize+1,output);  // copy
-
         return jOutputData;
-#else
-    //const std::string& word = squeezenet_words[top_class];
-    //char tmp[32];
-    //sprintf(tmp, "%.3f", max_score);
-    //std::string result_str = std::string(word.c_str() + 10) + " = " + tmp;
-    std::string result_str = std::string("finished");
-        int img_w = 640;
-        int img_h = 480;
-
-        if (0) {
-            for (int i = 0; i < out.h; i++) {
-                const float *values = out.row(i);
-
-                Object object;
-                object.label = values[0];
-                object.prob = values[1];
-                object.x = values[2] * img_w;
-                object.y = values[3] * img_h;
-                object.width = values[4] * img_w - object.x;
-                object.height = values[5] * img_h - object.y;
-                __android_log_print(ANDROID_LOG_DEBUG, "yolov2", "%.2f %.2f %.2f %.2f %.2f %.2f",
-                                    values[0], values[1],
-                                    object.x, object.y, object.width, object.height);
-                //objects.push_back(object);
-            }
-        }
-
-    // +10 to skip leading n03179701
-    jstring result = env->NewStringUTF(result_str.c_str());
-
-    bench_end("detect");
-
-    return result;
-
-#endif
-
 
     }
   }

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <resources>
-    <string name="app_name">NCnnAndroid</string>
     <string name="app_name_cam">NCNNCam</string>
     <string name="description_info">Info</string>
     <string name="request_permission">This sample needs camera permission.</string>

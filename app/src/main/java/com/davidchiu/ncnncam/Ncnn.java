@@ -8,6 +8,7 @@ package com.davidchiu.ncnncam;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.RectF;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -47,6 +48,7 @@ public class Ncnn
         if (paramFile == null || weightsFile == null) {
             return false;
         }
+        Log.i(Ncnn.class.getSimpleName(), "Loading: " + paramFile + " weight file: " + weightsFile);
         {
             InputStream assetsInputStream;
                 assetsInputStream = context.getAssets().open(paramFile);

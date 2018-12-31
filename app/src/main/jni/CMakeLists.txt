@@ -23,6 +23,12 @@ endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DSTANDALONE_DEMO_LIB \
                     -std=c++11 -fno-exceptions -fno-rtti -O2 -Wno-narrowing \
                     -fPIE")
+
+add_definitions(-DHEADER_FILE=${HEADER_FILE})
+add_definitions(-DNAMESPACE=${NAMESPACE})
+add_definitions(-DNCNN_INPUT=${NCNN_INPUT})
+add_definitions(-DNCNN_OUTPUT=${NCNN_OUTPUT})
+
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} \
                               -Wl,--allow-multiple-definition \
                               -Wl,--whole-archive -fPIE -v -fopenmp")

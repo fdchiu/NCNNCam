@@ -11,6 +11,12 @@ android {
         ndk {
             abiFilters "armeabi-v7a", "arm64-v8a"
         }
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++11 -fopenmp"//c++,多线程 需要添加need to add
+                abiFilters "armeabi-v7a" // 手机的硬件架构，基本所有的硬件都适配
+            }
+        }
 
     }
     externalNativeBuild {
@@ -35,8 +41,62 @@ android {
             //res.srcDirs          = ['src/main/res']
             //assets.srcDirs       = ['src/main/assets']
             //jniLibs.srcDirs  'build/'+project.ext.buildTempDir+ '/lib'
-            jniLibs.srcDirs  = ['src/main/libs']
+            jniLibs.srcDirs = ['src/main/libs']
             jni.srcDirs = [] // disable use of automatically generated Android.mk
+        }
+
+    }
+
+    flavorDimensions "model"
+    productFlavors {
+        yolo {
+            dimension "model"
+            applicationId "com.davidchiu.ncnnyolo"
+            versionName '0.1.0'
+            buildConfigField 'String', 'header_file', '"mobilenet_yolo.id.h"'
+            buildConfigField 'String', 'param_file', '"mobilenet_yolo.param.bin"'
+            buildConfigField 'String', 'weights_file', '"mobilenet_yolo.bin"'
+            buildConfigField 'String', 'label_file', '"labelcoco20.txt"'
+            buildConfigField 'int', 'cropW', '416'
+            buildConfigField 'int', 'cropH', '416'
+            versionNameSuffix "-yolo"
+            resValue "string", "app_name", "NCNN Yolo"
+            manifestPlaceholders = [screenOrientation: "vertical"]
+            buildConfigField 'String', 'model', '"yolo"'
+            externalNativeBuild {
+                cmake {
+                    arguments "-DYOLO=1"
+                    arguments "-DHEADER_FILE=mobilenet_yolo.id.h"
+                    arguments "-DNAMESPACE=mobilenet_yolo_param_id"
+                    arguments "-DNCNN_INPUT=mobilenet_yolo_param_id::BLOB_data"
+                    arguments "-DNCNN_OUTPUT=mobilenet_yolo_param_id::BLOB_detection_out"
+                }
+            }
+
+        }
+        SSDMobilnet {
+            dimension "model"
+            applicationId "com.davidchiu.ncnnssd"
+            versionName '0.1.0'
+            buildConfigField 'String', 'config_file', '"MobileNetSSD_deploy.id.h"'
+            buildConfigField 'String', 'param_file', '"MobileNetSSD_deploy.param.bin"'
+            buildConfigField 'String', 'weights_file', '"MobileNetSSD_deploy.bin"'
+            buildConfigField 'String', 'label_file', '"labelcoco20.txt"'
+            buildConfigField 'int', 'cropW', '300'
+            buildConfigField 'int', 'cropH', '300'
+            versionNameSuffix "-ssd"
+            resValue "string", "app_name", "NCNN SSD"
+            manifestPlaceholders = [screenOrientation: "vertical"]
+            buildConfigField 'String', 'model', '"ssd"'
+            externalNativeBuild {
+                cmake {
+                    arguments "-DSSD=1"
+                    arguments "-DHEADER_FILE=MobileNetSSD_deploy.id.h"
+                    arguments "-DNAMESPACE=MobileNetSSD_deploy_param_id"
+                    arguments "-DNCNN_INPUT=MobileNetSSD_deploy_param_id::BLOB_data"
+                    arguments "-DNCNN_OUTPUT=MobileNetSSD_deploy_param_id::BLOB_detection_out"
+                }
+            }
         }
 
     }

@@ -70,7 +70,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   // Minimum detection confidence to track a detection.
   private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.6f;
 
-  private static final boolean MAINTAIN_ASPECT = true;
+  private static final boolean MAINTAIN_ASPECT = false;
 
   private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
 
@@ -101,6 +101,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     public static final String NCNN_WEIGHTS_FILE = "mobilenet_yolo.bin";
     public static final String NCNN_LABEL_FILE = "labelcoco20.txt";
 
+    private String ncnnParamFile;
+    private String ncnnWeightsFile;
+    private String ncnnLabelFile;
+
    public static final int NCNN_YOLO_WIDTH = 416;
     public static final int NCNN_YOLO_HEIGHT = 416;
     public int frameWidth ;
@@ -115,7 +119,23 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     //private BorderedText borderedText;
   @Override
   public void onPreviewSizeChosen(final Size size, final int rotation) {
-    final float textSizePx =
+      if (BuildConfig.param_file != null) {
+          ncnnParamFile = BuildConfig.param_file;
+      } else {
+          ncnnParamFile = NCNN_PARAM_FILE;
+
+      }
+      if (BuildConfig.weights_file != null) {
+          ncnnWeightsFile = BuildConfig.weights_file;
+      }else {
+          ncnnWeightsFile = NCNN_WEIGHTS_FILE;
+      }
+      if (BuildConfig.label_file != null) {
+          ncnnLabelFile = BuildConfig.label_file;
+      } else {
+          ncnnLabelFile = NCNN_LABEL_FILE;
+      }
+      final float textSizePx =
         TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
     borderedText = new BorderedText(textSizePx);
@@ -130,11 +150,15 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     //tracker = new MultiBoxTracker(this);
 
-    int cropSize = TF_OD_API_INPUT_SIZE;
-    int cropSizeW = NCNN_YOLO_WIDTH;     //was: 128
-    int cropSizeH = NCNN_YOLO_HEIGHT;    //was: 96
-      cropWidth = cropSizeW;
-      cropHeight = cropSizeH;
+      cropWidth = NCNN_YOLO_WIDTH;     //was: 128
+      cropHeight = NCNN_YOLO_HEIGHT;    //was: 96
+
+      if (BuildConfig.cropW != 0) {
+          cropWidth = BuildConfig.cropW;
+      }
+      if (BuildConfig.cropH != 0) {
+          cropHeight = BuildConfig.cropH;
+      }
 
       previewWidth = size.getWidth();
       previewHeight = size.getHeight();
@@ -145,8 +169,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
       try {
       detector = new Ncnn();
       detector.setImageSize(size.getWidth(), size.getHeight());
-        detector.initNcnn(this, NCNN_PARAM_FILE, NCNN_WEIGHTS_FILE, NCNN_LABEL_FILE);
-      cropSize = TF_OD_API_INPUT_SIZE;
+        detector.initNcnn(this, ncnnParamFile, ncnnWeightsFile, ncnnLabelFile);
+      //cropSize = TF_OD_API_INPUT_SIZE;
     } catch (final Exception e) {
       //LOGGER.e("Exception initializing classifier!", e);
       Toast toast =
@@ -163,11 +187,11 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
 
     if (false) {
-        croppedBitmap = Bitmap.createBitmap(cropSizeW, cropSizeH, Config.ARGB_8888);
+        croppedBitmap = Bitmap.createBitmap(cropWidth, cropHeight, Config.ARGB_8888);
         frameToCropTransform =
                 ImageUtils.getTransformationMatrix(
                         previewWidth, previewHeight,
-                        cropSizeW, cropSizeH,
+                        cropWidth, cropHeight,
                         sensorOrientation, MAINTAIN_ASPECT);
 
         cropToFrameTransform = new Matrix();
